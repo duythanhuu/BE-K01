@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/EngineerProOrg/BE-K01/internal/app/auth"
+	"github.com/EngineerProOrg/BE-K01/internal/app/ping"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -14,7 +15,8 @@ import (
 // bằng miniredis mà không cần đổi code.
 type Deps struct {
 	Redis        redis.Cmdable
-	CookieSecure bool // cookie session chỉ gửi qua HTTPS
+	CookieSecure bool          // cookie session chỉ gửi qua HTTPS
+	PingSleep    time.Duration // thời gian /ping xử lý; 0 = mặc định 5s
 }
 
 // NewRouter dựng Gin engine với middleware chung và các route.
@@ -32,6 +34,10 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.CookieOptions{Secure: d.CookieSecure},
 	)
 	authHandler.Routes(r)
+
+	// Các route dưới đây bắt buộc đăng nhập.
+	authed := r.Group("", authHandler.RequireAuth())
+	ping.NewHandler(d.Redis, ping.Options{Sleep: d.PingSleep}).Routes(authed)
 	return r
 }
 
