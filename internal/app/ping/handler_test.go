@@ -29,6 +29,9 @@ func newEnv(t *testing.T, opt Options) *env { return newEnvWith(t, opt, nil) }
 func newEnvWith(t *testing.T, opt Options, tweak func(*Handler)) *env {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	if opt.Limit == 0 {
+		opt.Limit = manyLimit // phần lớn test không quan tâm rate limit; test rate limit đặt Limit rõ ràng
+	}
 
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
