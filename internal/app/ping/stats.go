@@ -47,14 +47,21 @@ func (s *Stats) Top(ctx context.Context, n int64) ([]TopEntry, error) {
 	return out, nil
 }
 
-// topper là phần của Stats mà handler cần; là interface để test giả lập lỗi.
-type topper interface {
+// Count trả về số người khác nhau đã ping thành công, **xấp xỉ** (HyperLogLog, sai số
+// chuẩn khoảng 0,81%). Chưa có ai thì là 0.
+func (s *Stats) Count(ctx context.Context) (int64, error) {
+	return s.rdb.PFCount(ctx, uniqKey).Result()
+}
+
+// statsReader là phần của Stats mà handler cần; là interface để test giả lập lỗi.
+type statsReader interface {
 	Top(ctx context.Context, n int64) ([]TopEntry, error)
+	Count(ctx context.Context) (int64, error)
 }
 
 // StatsHandler phục vụ các route thống kê.
 type StatsHandler struct {
-	stats topper
+	stats statsReader
 }
 
 func NewStatsHandler(rdb redis.Cmdable) *StatsHandler {
@@ -64,6 +71,7 @@ func NewStatsHandler(rdb redis.Cmdable) *StatsHandler {
 // Routes đăng ký route. r phải là nhóm route đã gắn auth.RequireAuth().
 func (h *StatsHandler) Routes(r gin.IRoutes) {
 	r.GET("/top", h.top)
+	r.GET("/count", h.count)
 }
 
 // top: GET /top (cần đăng nhập)
@@ -77,4 +85,17 @@ func (h *StatsHandler) top(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, entries)
+}
+
+// count: GET /count (cần đăng nhập)
+//
+//	200 {"approx_unique_users": N}  số người khác nhau đã gọi /ping, xấp xỉ (HyperLogLog)
+//	503 {"error":"unavailable"}     Redis lỗi
+func (h *StatsHandler) count(c *gin.Context) {
+	n, err := h.stats.Count(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"approx_unique_users": n})
 }

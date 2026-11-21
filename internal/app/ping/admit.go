@@ -14,6 +14,10 @@ const (
 	// Một cấu trúc phục vụ cả "đếm theo từng người" (ZSCORE) lẫn /top (ZREVRANGE).
 	countKey = "ping:count"
 
+	// uniqKey là HyperLogLog các username đã ping thành công: đếm xấp xỉ số người khác nhau
+	// với bộ nhớ cố định (~12 KB) dù có hàng triệu người; sai số chuẩn khoảng 0,81%.
+	uniqKey = "ping:uniq"
+
 	// rateKeyPrefix + username là ZSET các lần ping gần đây của một người:
 	// member = id duy nhất của lần ping, score = thời điểm (ms). Chỉ giữ trong cửa sổ.
 	rateKeyPrefix = "ping:rl:"
@@ -91,7 +95,7 @@ func NewAdmitter(rdb redis.Cmdable, clock Clock, limit int, window time.Duration
 // Đọc rồi mới ghi (không dùng một lệnh nguyên tử) là an toàn vì hàm này chỉ được gọi khi
 // đang giữ khoá toàn cục `ping:lock`: trong cả hệ thống chỉ một request ở đây tại một
 // thời điểm, nên không có hai request cùng đọc "còn 1 lượt" rồi cùng ghi. Các lần ghi
-// (ZADD, EXPIRE, ZINCRBY) chạy trong một giao dịch nên cùng thành công hoặc cùng không.
+// (ZADD, EXPIRE, ZINCRBY, PFADD) chạy trong một giao dịch nên cùng thành công hoặc cùng không.
 func (a *RedisAdmitter) Admit(ctx context.Context, username string) (Admission, error) {
 	now, err := a.clock.Now(ctx)
 	if err != nil {
@@ -136,6 +140,7 @@ func (a *RedisAdmitter) Admit(ctx context.Context, username string) (Admission, 
 		p.ZAdd(ctx, rlKey, redis.Z{Score: float64(nowMs), Member: strconv.FormatInt(nowMs, 10) + "-" + nonce})
 		p.Expire(ctx, rlKey, a.window+time.Second) // dọn key của người không ping nữa
 		incr = p.ZIncrBy(ctx, countKey, 1, username)
+		p.PFAdd(ctx, uniqKey, username) // idempotent: ping nhiều lần vẫn chỉ tính một người
 		return nil
 	}); err != nil {
 		return Admission{}, err

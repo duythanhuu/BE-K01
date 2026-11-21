@@ -129,9 +129,7 @@ func TestTop_ReflectsRealPingsAndIgnoresRejectedOnes(t *testing.T) {
 
 // Redis lỗi ở bước đọc bảng xếp hạng: 503.
 func TestTop_StatsErrorIs503(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	(&StatsHandler{stats: failingTopper{}}).Routes(r)
+	r := newStatsRouter(failingTopper{})
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/top", nil))
@@ -145,6 +143,10 @@ type failingTopper struct{}
 
 func (failingTopper) Top(context.Context, int64) ([]TopEntry, error) {
 	return nil, errors.New("redis hỏng")
+}
+
+func (failingTopper) Count(context.Context) (int64, error) {
+	return 0, errors.New("redis hỏng")
 }
 
 func TestStats_Top(t *testing.T) {
@@ -173,4 +175,12 @@ func TestStats_Top(t *testing.T) {
 	if _, err := s.Top(ctx, 10); err == nil {
 		t.Error("Top phải trả lỗi khi Redis chết")
 	}
+}
+
+// newStatsRouter dựng router chỉ có route thống kê (không auth) với nguồn dữ liệu tuỳ ý.
+func newStatsRouter(r statsReader) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	e := gin.New()
+	(&StatsHandler{stats: r}).Routes(e)
+	return e
 }

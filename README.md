@@ -1,3 +1,9 @@
+# Bài tập: web server Gin + Redis
+
+Đăng ký và đăng nhập có session, `/ping` chỉ cho một người chạy tại một thời điểm, rate limit, `/top`, `/count` (HyperLogLog). Cách chạy, API và thiết kế: [docs/usage.md](docs/usage.md).
+
+---
+
 # Standard Go Project Layout
 
 Translations:
