@@ -22,8 +22,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Timeout ngắn và retry ít để Redis chậm/chết thì request lỗi nhanh (503),
-	// không treo nhiều giây.
+	// Mỗi bước (mở kết nối, gửi lệnh, chờ trả lời) chỉ chờ tối đa 1s và lệnh chỉ
+	// thử lại 1 lần, để Redis chậm/chết thì request lỗi (503) sau cỡ 1s thay vì
+	// treo 3-5s như mặc định.
+	// Lưu ý: pool của go-redis còn tự thử mở lại kết nối nên thực tế đo được
+	// khoảng 0,8s khi Redis chết, chưa phải tức thì.
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         cfg.RedisAddr,
 		Password:     cfg.RedisPassword,
