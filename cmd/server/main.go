@@ -1,6 +1,6 @@
 // server là web server Gin + Redis của bài tập.
 //
-// Cấu hình qua biến môi trường: HTTP_ADDR, REDIS_ADDR, REDIS_PASSWORD.
+// Cấu hình qua biến môi trường: HTTP_ADDR, REDIS_ADDR, REDIS_PASSWORD, COOKIE_SECURE.
 package main
 
 import (
@@ -44,7 +44,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewRouter(server.Deps{Redis: rdb}),
+		Handler:           server.NewRouter(server.Deps{Redis: rdb, CookieSecure: cfg.CookieSecure}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
