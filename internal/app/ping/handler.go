@@ -28,8 +28,9 @@ type Options struct {
 
 // Handler phục vụ /ping.
 type Handler struct {
-	lock  *Lock
-	sleep time.Duration
+	lock     *Lock
+	admitter Admitter
+	sleep    time.Duration
 }
 
 func NewHandler(rdb redis.Cmdable, opt Options) *Handler {
@@ -45,7 +46,7 @@ func NewHandler(rdb redis.Cmdable, opt Options) *Handler {
 	if ttl <= sleep {
 		ttl = 2 * sleep
 	}
-	return &Handler{lock: NewLock(rdb, ttl), sleep: sleep}
+	return &Handler{lock: NewLock(rdb, ttl), admitter: NewAdmitter(rdb), sleep: sleep}
 }
 
 // Routes đăng ký route. r phải là nhóm route đã gắn auth.RequireAuth().
@@ -55,9 +56,9 @@ func (h *Handler) Routes(r gin.IRoutes) {
 
 // ping: GET /ping (cần đăng nhập)
 //
-//	200 {"message":"pong","username"}  chạy xong sau ~5s
-//	429 {"error":"busy"}               đang có người khác ping
-//	503 {"error":"unavailable"}        Redis lỗi
+//	200 {"message":"pong","username","count"}  chạy xong sau ~5s; count = số lần ping của người này
+//	429 {"error":"busy"}                       đang có người khác ping
+//	503 {"error":"unavailable"}                Redis lỗi
 func (h *Handler) ping(c *gin.Context) {
 	username, _ := auth.UsernameFrom(c)
 	ctx := c.Request.Context()
@@ -74,11 +75,19 @@ func (h *Handler) ping(c *gin.Context) {
 	// Luôn nhả khoá khi rời hàm: xong việc, client ngắt kết nối, hay panic.
 	defer h.release(token)
 
+	// Ghi nhận ngay khi được chấp nhận, trước khi sleep: lần ping này tính là một lần
+	// gọi kể cả khi client ngắt kết nối giữa chừng. Request bị 429 ở trên không tới đây.
+	adm, err := h.admitter.Admit(ctx, username)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+
 	timer := time.NewTimer(h.sleep)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
-		c.JSON(http.StatusOK, gin.H{"message": "pong", "username": username})
+		c.JSON(http.StatusOK, gin.H{"message": "pong", "username": username, "count": adm.Count})
 	case <-ctx.Done():
 		// Client đã ngắt: không cần giữ khoá thêm cho tới hết thời gian xử lý.
 		c.AbortWithStatus(statusClientClosed)
