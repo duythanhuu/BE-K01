@@ -13,7 +13,8 @@ import (
 // Deps gom các phụ thuộc của router. Redis là redis.Cmdable để test thay được
 // bằng miniredis mà không cần đổi code.
 type Deps struct {
-	Redis redis.Cmdable
+	Redis        redis.Cmdable
+	CookieSecure bool // cookie session chỉ gửi qua HTTPS
 }
 
 // NewRouter dựng Gin engine với middleware chung và các route.
@@ -25,7 +26,12 @@ func NewRouter(d Deps) *gin.Engine {
 
 	r.GET("/healthz", healthz(d.Redis))
 
-	auth.NewHandler(auth.NewUserStore(d.Redis)).Routes(r)
+	authHandler := auth.NewHandler(
+		auth.NewUserStore(d.Redis),
+		auth.NewSessionStore(d.Redis, auth.DefaultSessionTTL),
+		auth.CookieOptions{Secure: d.CookieSecure},
+	)
+	authHandler.Routes(r)
 	return r
 }
 
