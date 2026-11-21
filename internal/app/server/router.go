@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/EngineerProOrg/BE-K01/internal/app/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -23,6 +24,8 @@ func NewRouter(d Deps) *gin.Engine {
 	r.Use(gin.Recovery(), gin.Logger())
 
 	r.GET("/healthz", healthz(d.Redis))
+
+	auth.NewHandler(auth.NewUserStore(d.Redis)).Routes(r)
 	return r
 }
 
