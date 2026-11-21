@@ -47,6 +47,7 @@ func newEnvWith(t *testing.T, opt Options, tweak func(*Handler)) *env {
 		tweak(h)
 	}
 	h.Routes(authed)
+	NewStatsHandler(rdb).Routes(authed)
 
 	return &env{r: r, mr: mr, rdb: rdb, sessions: sessions}
 }

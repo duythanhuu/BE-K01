@@ -38,6 +38,7 @@ func NewRouter(d Deps) *gin.Engine {
 	// Các route dưới đây bắt buộc đăng nhập.
 	authed := r.Group("", authHandler.RequireAuth())
 	ping.NewHandler(d.Redis, ping.Options{Sleep: d.PingSleep}).Routes(authed)
+	ping.NewStatsHandler(d.Redis).Routes(authed)
 	return r
 }
 
