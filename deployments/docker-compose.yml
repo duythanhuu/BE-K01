@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: bek01-redis
+    restart: unless-stopped
+    # requirepass: Redis mặc định không yêu cầu mật khẩu.
+    # appendonly: ghi AOF để dữ liệu (user, session) sống qua lần restart container.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?đặt REDIS_PASSWORD trong .env}
+      - --appendonly
+      - "yes"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      # Chỉ bind localhost để mạng LAN không kết nối được.
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  redisdata:
