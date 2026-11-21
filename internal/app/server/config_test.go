@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadConfig_Defaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "")
@@ -25,6 +28,22 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 
 	if c.HTTPAddr != ":9999" || c.RedisAddr != "redis:6380" || c.RedisPassword != "s3cret" || !c.CookieSecure {
 		t.Fatalf("đọc env sai: %+v", c)
+	}
+}
+
+func TestLoadConfig_PingSleep(t *testing.T) {
+	for in, want := range map[string]time.Duration{
+		"":      0, // 0 = để /ping dùng mặc định 5s
+		"5s":    5 * time.Second,
+		"250ms": 250 * time.Millisecond,
+		"oops":  0,
+		"-1s":   0,
+		"0s":    0,
+	} {
+		t.Setenv("PING_SLEEP", in)
+		if got := LoadConfig().PingSleep; got != want {
+			t.Errorf("PING_SLEEP=%q → %v, want %v", in, got, want)
+		}
 	}
 }
 
