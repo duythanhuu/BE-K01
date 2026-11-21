@@ -23,7 +23,10 @@ type env struct {
 	sessions *auth.SessionStore
 }
 
-func newEnv(t *testing.T, opt Options) *env {
+func newEnv(t *testing.T, opt Options) *env { return newEnvWith(t, opt, nil) }
+
+// newEnvWith cho phép test chỉnh Handler (ví dụ thay Admitter bằng bản giả) trước khi nối route.
+func newEnvWith(t *testing.T, opt Options, tweak func(*Handler)) *env {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -36,7 +39,11 @@ func newEnv(t *testing.T, opt Options) *env {
 
 	r := gin.New()
 	authed := r.Group("", authH.RequireAuth())
-	NewHandler(rdb, opt).Routes(authed)
+	h := NewHandler(rdb, opt)
+	if tweak != nil {
+		tweak(h)
+	}
+	h.Routes(authed)
 
 	return &env{r: r, mr: mr, rdb: rdb, sessions: sessions}
 }
