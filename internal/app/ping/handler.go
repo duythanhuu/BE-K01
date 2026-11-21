@@ -2,8 +2,11 @@ package ping
 
 import (
 	"context"
+	"errors"
 	"log"
+	"math"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/EngineerProOrg/BE-K01/internal/app/auth"
@@ -24,6 +27,10 @@ const (
 type Options struct {
 	Sleep   time.Duration // thời gian xử lý giả lập; mặc định 5s
 	LockTTL time.Duration // TTL của khoá; mặc định 10s, luôn lớn hơn Sleep
+
+	Limit  int           // số lần ping tối đa mỗi người trong Window; mặc định 2
+	Window time.Duration // độ dài cửa sổ rate limit; mặc định 60s
+	Clock  Clock         // nguồn thời gian cho rate limit; mặc định là giờ của Redis (test thay bằng đồng hồ giả)
 }
 
 // Handler phục vụ /ping.
@@ -46,7 +53,7 @@ func NewHandler(rdb redis.Cmdable, opt Options) *Handler {
 	if ttl <= sleep {
 		ttl = 2 * sleep
 	}
-	return &Handler{lock: NewLock(rdb, ttl), admitter: NewAdmitter(rdb), sleep: sleep}
+	return &Handler{lock: NewLock(rdb, ttl), admitter: NewAdmitter(rdb, opt.Clock, opt.Limit, opt.Window), sleep: sleep}
 }
 
 // Routes đăng ký route. r phải là nhóm route đã gắn auth.RequireAuth().
@@ -58,6 +65,7 @@ func (h *Handler) Routes(r gin.IRoutes) {
 //
 //	200 {"message":"pong","username","count"}  chạy xong sau ~5s; count = số lần ping của người này
 //	429 {"error":"busy"}                       đang có người khác ping
+//	429 {"error":"rate_limited","retry_after_seconds"} + header Retry-After: đã ping 2 lần trong 60s
 //	503 {"error":"unavailable"}                Redis lỗi
 func (h *Handler) ping(c *gin.Context) {
 	username, _ := auth.UsernameFrom(c)
@@ -78,7 +86,19 @@ func (h *Handler) ping(c *gin.Context) {
 	// Ghi nhận ngay khi được chấp nhận, trước khi sleep: lần ping này tính là một lần
 	// gọi kể cả khi client ngắt kết nối giữa chừng. Request bị 429 ở trên không tới đây.
 	adm, err := h.admitter.Admit(ctx, username)
-	if err != nil {
+	var limited *RateLimitedError
+	switch {
+	case err == nil:
+	case errors.As(err, &limited):
+		// Khoá được nhả bởi defer ngay khi rời hàm: người khác ping được liền.
+		secs := int(math.Ceil(limited.RetryAfter.Seconds()))
+		if secs < 1 {
+			secs = 1
+		}
+		c.Header("Retry-After", strconv.Itoa(secs))
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate_limited", "retry_after_seconds": secs})
+		return
+	default:
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
 		return
 	}
