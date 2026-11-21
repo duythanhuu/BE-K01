@@ -6,7 +6,7 @@ export GOFLAGS := -mod=mod
 
 COMPOSE := docker compose --env-file .env -f deployments/docker-compose.yml
 
-.PHONY: up down run test
+.PHONY: up down run test smoke
 
 .env:
 	cp .env.example .env
@@ -29,3 +29,7 @@ test:
 	go build ./...
 	go vet ./...
 	go test -race ./...
+
+# Smoke test end-to-end: tự dựng Redis tạm + server riêng (cổng 8099), không đụng dữ liệu dev.
+smoke:
+	./scripts/smoke.sh
