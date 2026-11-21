@@ -14,8 +14,18 @@ const (
 	fieldCreatedAt    = "created_at"
 )
 
-// ErrUserExists được trả về khi username đã có người đăng ký.
-var ErrUserExists = errors.New("auth: user đã tồn tại")
+var (
+	// ErrUserExists được trả về khi username đã có người đăng ký.
+	ErrUserExists = errors.New("auth: user đã tồn tại")
+	// ErrUserNotFound được trả về khi không có user với username đó.
+	ErrUserNotFound = errors.New("auth: user không tồn tại")
+)
+
+// User là dữ liệu cần để xác thực.
+type User struct {
+	Username     string
+	PasswordHash string
+}
 
 func userKey(username string) string { return userKeyPrefix + username }
 
@@ -27,6 +37,18 @@ type UserStore struct {
 
 func NewUserStore(rdb redis.Cmdable) *UserStore {
 	return &UserStore{rdb: rdb, now: time.Now}
+}
+
+// Get lấy user theo username đã chuẩn hoá. Trả ErrUserNotFound nếu không có.
+func (s *UserStore) Get(ctx context.Context, username string) (*User, error) {
+	hash, err := s.rdb.HGet(ctx, userKey(username), fieldPasswordHash).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &User{Username: username, PasswordHash: hash}, nil
 }
 
 // Create tạo user mới. username phải đã được chuẩn hoá và hợp lệ.

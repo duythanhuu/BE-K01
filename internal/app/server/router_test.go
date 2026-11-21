@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -45,6 +46,20 @@ func TestHealthz_RedisDown(t *testing.T) {
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503, body=%s", w.Code, w.Body)
+	}
+}
+
+// Các route auth phải được nối vào router thật (không chỉ chạy được trong test của package auth).
+func TestRouter_AuthRoutesAreWired(t *testing.T) {
+	r, _ := newTestRouter(t)
+
+	if w := get(r, "/me"); w.Code != http.StatusUnauthorized {
+		t.Errorf("GET /me chưa đăng nhập: status = %d, want 401", w.Code)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(`{"username":"x","password":"y"}`)))
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("POST /login sai thông tin: status = %d, want 401", w.Code)
 	}
 }
 

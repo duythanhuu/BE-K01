@@ -88,6 +88,32 @@ func TestUserStore_Create_ConcurrentSameUsername(t *testing.T) {
 	}
 }
 
+func TestUserStore_Get(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	_ = s.Create(ctx, "alice", "HASH")
+
+	u, err := s.Get(ctx, "alice")
+	if err != nil || u.Username != "alice" || u.PasswordHash != "HASH" {
+		t.Fatalf("Get = %+v, %v", u, err)
+	}
+
+	if _, err := s.Get(ctx, "nobody"); !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
+	}
+}
+
+func TestUserStore_Get_RedisDownIsNotNotFound(t *testing.T) {
+	s, mr := newTestStore(t)
+	mr.Close()
+
+	_, err := s.Get(context.Background(), "alice")
+
+	if err == nil || errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("err = %v, want lỗi kết nối (không phải ErrUserNotFound)", err)
+	}
+}
+
 func TestUserStore_Create_RedisDown(t *testing.T) {
 	s, mr := newTestStore(t)
 	mr.Close()
